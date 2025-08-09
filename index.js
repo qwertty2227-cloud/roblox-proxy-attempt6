@@ -1,62 +1,66 @@
-const express = require("express");
-const axios = require("axios");
-const cors = require("cors");
+const express = require('express');
+const bodyParser = require('body-parser');
+const cors = require('cors');
+const axios = require('axios');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const port = process.env.PORT || 10000;  // Use dynamic port for Render
 
 app.use(cors());
-app.use(express.json());
+app.use(bodyParser.json());
 
-app.post("/lookup", async (req, res) => {
+app.post('/lookup', async (req, res) => {
+  const { username, type } = req.body;
+
+  if (!username || !type) {
+    return res.status(400).json({ error: 'Missing username or type.' });
+  }
+
   try {
-    const { username, type } = req.body;
-    if (!username || !type) {
-      return res.status(400).json({ error: "Missing username or type" });
-    }
-
-    // Step 1: Get userId from username
-    const userIdResponse = await axios.get(
-      `https://users.roblox.com/v1/usernames/users`,
-      { params: { usernames: JSON.stringify([username]) } }
+    // Get userId from username
+    const userRes = await axios.post(
+      'https://users.roblox.com/v1/usernames/users',
+      { usernames: [username], excludeBannedUsers: true },
+      { headers: { 'Content-Type': 'application/json' } }
     );
 
-    if (!userIdResponse.data.data || userIdResponse.data.data.length === 0) {
-      return res.status(404).json({ error: "User not found" });
+    const user = userRes.data.data[0];
+    if (!user) {
+      return res.status(404).json({ error: 'User not found.' });
     }
 
-    const userId = userIdResponse.data.data[0].id;
+    const userId = user.id;
 
-    let apiUrl;
-    if (type === "friends") {
-      apiUrl = `https://friends.roblox.com/v1/users/${userId}/friends`;
-    } else if (type === "followers") {
-      apiUrl = `https://friends.roblox.com/v1/users/${userId}/followers`;
-    } else if (type === "followings") {
-      apiUrl = `https://friends.roblox.com/v1/users/${userId}/followings`;
+    let listUrl;
+    if (type === 'friends') {
+      listUrl = `https://friends.roblox.com/v1/users/${userId}/friends`;
+    } else if (type === 'followers') {
+      listUrl = `https://friends.roblox.com/v1/users/${userId}/followers`;
+    } else if (type === 'following') {
+      listUrl = `https://friends.roblox.com/v1/users/${userId}/followings`;
     } else {
-      return res.status(400).json({ error: "Invalid type" });
+      return res.status(400).json({ error: 'Invalid type.' });
     }
 
-    // Step 2: Fetch data
-    const response = await axios.get(apiUrl);
+    // Get list (max 100)
+    const listRes = await axios.get(listUrl + '?limit=100');
+    const users = listRes.data.data || [];
 
-    // Extract usernames
-    const usernames = response.data.data.map((item) => item.name);
+    const userNames = users.map(u => u.username);
 
     res.json({
-      username,
-      type,
-      total: usernames.length,
-      list: usernames
+      userId,
+      username: user.name,
+      displayName: user.displayName,
+      list: userNames
     });
 
-  } catch (error) {
-    console.error("Error fetching data:", error.message);
-    res.status(500).json({ error: "Server error" });
+  } catch (err) {
+    console.error('Error fetching data:', err.message);
+    res.status(500).json({ error: 'Internal server error.' });
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`✅ Proxy server running on port ${PORT}`);
+app.listen(port, () => {
+  console.log(`Proxy server running on port ${port}`);
 });
