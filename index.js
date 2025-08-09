@@ -8,8 +8,10 @@ const PORT = process.env.PORT || 10000;
 app.use(cors());
 app.use(express.json());
 
-app.post("/lookup", async (req, res) => {
-  const { username, type } = req.body;
+// Change to GET with query params: /lookup?username=someuser&type=friends
+app.get("/lookup", async (req, res) => {
+  const username = req.query.username;
+  const type = req.query.type;
 
   if (!username || !type) {
     return res.status(400).json({ error: "Missing username or type" });
@@ -23,12 +25,10 @@ app.post("/lookup", async (req, res) => {
   try {
     // 1. Get user ID by username
     const userRes = await axios.get(
-      `https://api.roblox.com/users/get-by-username?username=${encodeURIComponent(
-        username
-      )}`
+      `https://api.roblox.com/users/get-by-username?username=${encodeURIComponent(username)}`
     );
 
-    if (userRes.data && userRes.data.Id === 0) {
+    if (!userRes.data || userRes.data.Id === 0) {
       return res.status(404).json({ error: "User not found" });
     }
 
@@ -41,7 +41,6 @@ app.post("/lookup", async (req, res) => {
       listRes = await axios.get(
         `https://friends.roblox.com/v1/users/${userId}/friends`
       );
-      // Extract usernames from response
       const friendsUsernames = listRes.data.data.map((user) => user.name);
       return res.json({ list: friendsUsernames });
     }
